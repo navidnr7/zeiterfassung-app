@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeiterfassung</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .time-card {
+            transition: all 0.3s ease;
+        }
+        .time-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .working-hours {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .break-time {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-clock-history me-2"></i>Zeiterfassung</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <button class="btn btn-outline-light me-2" onclick="exportToExcel()">
+                            <i class="bi bi-download me-1"></i>Excel Export
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- View Selection -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-outline-primary active" onclick="switchView('day')">
+                        <i class="bi bi-calendar-day me-1"></i>Tag
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="switchView('week')">
+                        <i class="bi bi-calendar-week me-1"></i>Woche
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="switchView('month')">
+                        <i class="bi bi-calendar-month me-1"></i>Monat
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Date Selection -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-calendar3 me-2"></i>Datum auswählen</h5>
+                        <input type="date" class="form-control" id="selectedDate" onchange="updateView()">
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card stats-card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title"><i class="bi bi-graph-up me-2"></i>Übersicht</h5>
+                        <div id="overviewStats">Datum auswählen...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Day View -->
+        <div id="dayView">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card time-card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Arbeitszeiten eingeben</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">Arbeitsbeginn</label>
+                                    <input type="time" class="form-control" id="startTime">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">Pausenbeginn</label>
+                                    <input type="time" class="form-control" id="breakStart">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">Pausenende</label>
+                                    <input type="time" class="form-control" id="breakEnd">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">Arbeitsende</label>
+                                    <input type="time" class="form-control" id="endTime">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12">
+                                    <button class="btn btn-primary" onclick="saveTimeEntry()">
+                                        <i class="bi bi-save me-1"></i>Speichern
+                                    </button>
+                                    <button class="btn btn-outline-danger ms-2" onclick="deleteTimeEntry()">
+                                        <i class="bi bi-trash me-1"></i>Löschen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Stats -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card working-hours">
+                        <div class="card-body text-center">
+                            <h6><i class="bi bi-briefcase me-1"></i>Arbeitszeit</h6>
+                            <h3 id="dailyWorkHours">0:00</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card break-time">
+                        <div class="card-body text-center">
+                            <h6><i class="bi bi-cup-hot me-1"></i>Pausenzeit</h6>
+                            <h3 id="dailyBreakHours">0:00</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <h6><i class="bi bi-clock me-1"></i>Gesamtzeit</h6>
+                            <h3 id="dailyTotalHours">0:00</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Week View -->
+        <div id="weekView" style="display: none;">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>Wochenübersicht</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Tag</th>
+                                    <th>Datum</th>
+                                    <th>Arbeitszeit</th>
+                                    <th>Pausenzeit</th>
+                                    <th>Gesamtzeit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weekTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="card working-hours">
+                                <div class="card-body text-center">
+                                    <h6>Wochenarbeitszeit</h6>
+                                    <h4 id="weeklyWorkHours">0:00</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card break-time">
+                                <div class="card-body text-center">
+                                    <h6>Wochenpausenzeit</h6>
+                                    <h4 id="weeklyBreakHours">0:00</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <h6>Wochengesamtzeit</h6>
+                                    <h4 id="weeklyTotalHours">0:00</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Month View -->
+        <div id="monthView" style="display: none;">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar-month me-2"></i>Monatsübersicht</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Datum</th>
+                                    <th>Wochentag</th>
+                                    <th>Arbeitszeit</th>
+                                    <th>Pausenzeit</th>
+                                    <th>Gesamtzeit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="card working-hours">
+                                <div class="card-body text-center">
+                                    <h6>Monatsarbeitszeit</h6>
+                                    <h4 id="monthlyWorkHours">0:00</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card break-time">
+                                <div class="card-body text-center">
+                                    <h6>Monatspausenzeit</h6>
+                                    <h4 id="monthlyBreakHours">0:00</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stats-card">
+                                <div class="card-body text-center">
+                                    <h6>Monatsgesamtzeit</h6>
+                                    <h4 id="monthlyTotalHours">0:00</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentView = 'day';
+        let timeEntries = JSON.parse(localStorage.getItem('timeEntries')) || {};
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('selectedDate').value = new Date().toISOString().split('T')[0];
+            updateView();
+        });
+
+        function switchView(view) {
+            currentView = view;
+            
+            // Update button states
+            document.querySelectorAll('.btn-group button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Show/hide views
+            document.getElementById('dayView').style.display = view === 'day' ? 'block' : 'none';
+            document.getElementById('weekView').style.display = view === 'week' ? 'block' : 'none';
+            document.getElementById('monthView').style.display = view === 'month' ? 'block' : 'none';
+            
+            updateView();
+        }
+
+        function updateView() {
+            const selectedDate = document.getElementById('selectedDate').value;
+            if (!selectedDate) return;
+
+            if (currentView === 'day') {
+                loadDayView(selectedDate);
+            } else if (currentView === 'week') {
+                loadWeekView(selectedDate);
+            } else if (currentView === 'month') {
+                loadMonthView(selectedDate);
+            }
+        }
+
+        function loadDayView(date) {
+            const entry = timeEntries[date];
+            if (entry) {
+                document.getElementById('startTime').value = entry.startTime || '';
+                document.getElementById('breakStart').value = entry.breakStart || '';
+                document.getElementById('breakEnd').value = entry.breakEnd || '';
+                document.getElementById('endTime').value = entry.endTime || '';
+            } else {
+                document.getElementById('startTime').value = '';
+                document.getElementById('breakStart').value = '';
+                document.getElementById('breakEnd').value = '';
+                document.getElementById('endTime').value = '';
+            }
+            
+            calculateDailyStats(date);
+        }
+
+        function loadWeekView(date) {
+            const weekStart = getWeekStart(new Date(date));
+            const weekDays = [];
+            
+            for (let i = 0; i < 7; i++) {
+                const day = new Date(weekStart);
+                day.setDate(weekStart.getDate() + i);
+                weekDays.push(day.toISOString().split('T')[0]);
+            }
+            
+            const tbody = document.getElementById('weekTableBody');
+            tbody.innerHTML = '';
+            
+            let totalWorkMinutes = 0;
+            let totalBreakMinutes = 0;
+            let totalMinutes = 0;
+            
+            weekDays.forEach(dateStr => {
+                const entry = timeEntries[dateStr];
+                const date = new Date(dateStr);
+                const dayName = date.toLocaleDateString('de-DE', { weekday: 'long' });
+                
+                let workTime = '0:00';
+                let breakTime = '0:00';
+                let totalTime = '0:00';
+                
+                if (entry && entry.startTime && entry.endTime) {
+                    const stats = calculateTimeStats(entry);
+                    workTime = formatMinutes(stats.workMinutes);
+                    breakTime = formatMinutes(stats.breakMinutes);
+                    totalTime = formatMinutes(stats.totalMinutes);
+                    
+                    totalWorkMinutes += stats.workMinutes;
+                    totalBreakMinutes += stats.breakMinutes;
+                    totalMinutes += stats.totalMinutes;
+                }
+                
+                const row = `
+                    <tr>
+                        <td>${dayName}</td>
+                        <td>${date.toLocaleDateString('de-DE')}</td>
+                        <td>${workTime}</td>
+                        <td>${breakTime}</td>
+                        <td>${totalTime}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+            
+            document.getElementById('weeklyWorkHours').textContent = formatMinutes(totalWorkMinutes);
+            document.getElementById('weeklyBreakHours').textContent = formatMinutes(totalBreakMinutes);
+            document.getElementById('weeklyTotalHours').textContent = formatMinutes(totalMinutes);
+        }
+
+        function loadMonthView(date) {
+            const monthStart = new Date(date);
+            monthStart.setDate(1);
+            const monthEnd = new Date(monthStart);
+            monthEnd.setMonth(monthEnd.getMonth() + 1);
+            monthEnd.setDate(0);
+            
+            const tbody = document.getElementById('monthTableBody');
+            tbody.innerHTML = '';
+            
+            let totalWorkMinutes = 0;
+            let totalBreakMinutes = 0;
+            let totalMinutes = 0;
+            
+            for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+                const dateStr = d.toISOString().split('T')[0];
+                const entry = timeEntries[dateStr];
+                const dayName = d.toLocaleDateString('de-DE', { weekday: 'long' });
+                
+                let workTime = '0:00';
+                let breakTime = '0:00';
+                let totalTime = '0:00';
+                
+                if (entry && entry.startTime && entry.endTime) {
+                    const stats = calculateTimeStats(entry);
+                    workTime = formatMinutes(stats.workMinutes);
+                    breakTime = formatMinutes(stats.breakMinutes);
+                    totalTime = formatMinutes(stats.totalMinutes);
+                    
+                    totalWorkMinutes += stats.workMinutes;
+                    totalBreakMinutes += stats.breakMinutes;
+                    totalMinutes += stats.totalMinutes;
+                }
+                
+                const row = `
+                    <tr>
+                        <td>${d.toLocaleDateString('de-DE')}</td>
+                        <td>${dayName}</td>
+                        <td>${workTime}</td>
+                        <td>${breakTime}</td>
+                        <td>${totalTime}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            }
+            
+            document.getElementById('monthlyWorkHours').textContent = formatMinutes(totalWorkMinutes);
+            document.getElementById('monthlyBreakHours').textContent = formatMinutes(totalBreakMinutes);
+            document.getElementById('monthlyTotalHours').textContent = formatMinutes(totalMinutes);
+        }
+
+        function saveTimeEntry() {
+            const date = document.getElementById('selectedDate').value;
+            const startTime = document.getElementById('startTime').value;
+            const breakStart = document.getElementById('breakStart').value;
+            const breakEnd = document.getElementById('breakEnd').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            if (!date) {
+                alert('Bitte wählen Sie ein Datum aus.');
+                return;
+            }
+            
+            timeEntries[date] = {
+                startTime,
+                breakStart,
+                breakEnd,
+                endTime
+            };
+            
+            localStorage.setItem('timeEntries', JSON.stringify(timeEntries));
+            calculateDailyStats(date);
+            
+            // Show success message
+            const toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-white bg-success border-0 position-fixed top-0 end-0 m-3';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="bi bi-check-circle me-2"></i>Zeiten erfolgreich gespeichert!
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            setTimeout(() => {
+                document.body.removeChild(toast);
+            }, 3000);
+        }
+
+        function deleteTimeEntry() {
+            const date = document.getElementById('selectedDate').value;
+            if (!date) return;
+            
+            if (confirm('Möchten Sie die Zeiten für diesen Tag wirklich löschen?')) {
+                delete timeEntries[date];
+                localStorage.setItem('timeEntries', JSON.stringify(timeEntries));
+                loadDayView(date);
+            }
+        }
+
+        function calculateDailyStats(date) {
+            const entry = timeEntries[date];
+            let workMinutes = 0;
+            let breakMinutes = 0;
+            let totalMinutes = 0;
+            
+            if (entry && entry.startTime && entry.endTime) {
+                const stats = calculateTimeStats(entry);
+                workMinutes = stats.workMinutes;
+                breakMinutes = stats.breakMinutes;
+                totalMinutes = stats.totalMinutes;
+            }
+            
+            document.getElementById('dailyWorkHours').textContent = formatMinutes(workMinutes);
+            document.getElementById('dailyBreakHours').textContent = formatMinutes(breakMinutes);
+            document.getElementById('dailyTotalHours').textContent = formatMinutes(totalMinutes);
+        }
+
+        function calculateTimeStats(entry) {
+            const startMinutes = timeToMinutes(entry.startTime);
+            const endMinutes = timeToMinutes(entry.endTime);
+            const breakStartMinutes = entry.breakStart ? timeToMinutes(entry.breakStart) : 0;
+            const breakEndMinutes = entry.breakEnd ? timeToMinutes(entry.breakEnd) : 0;
+            
+            const totalMinutes = endMinutes - startMinutes;
+            const breakMinutes = (breakStartMinutes && breakEndMinutes) ? breakEndMinutes - breakStartMinutes : 0;
+            const workMinutes = totalMinutes - breakMinutes;
+            
+            return { workMinutes, breakMinutes, totalMinutes };
+        }
+
+        function timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        }
+
+        function formatMinutes(minutes) {
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return `${hours}:${mins.toString().padStart(2, '0')}`;
+        }
+
+        function getWeekStart(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Montag als Wochenstart
+            return new Date(d.setDate(diff));
+        }
+
+        function exportToExcel() {
+            let data = [];
+            
+            if (currentView === 'day') {
+                const date = document.getElementById('selectedDate').value;
+                const entry = timeEntries[date];
+                if (entry) {
+                    const stats = calculateTimeStats(entry);
+                    data.push({
+                        'Datum': date,
+                        'Arbeitsbeginn': entry.startTime || '',
+                        'Pausenbeginn': entry.breakStart || '',
+                        'Pausenende': entry.breakEnd || '',
+                        'Arbeitsende': entry.endTime || '',
+                        'Arbeitszeit': formatMinutes(stats.workMinutes),
+                        'Pausenzeit': formatMinutes(stats.breakMinutes),
+                        'Gesamtzeit': formatMinutes(stats.totalMinutes)
+                    });
+                }
+            } else if (currentView === 'week') {
+                const selectedDate = document.getElementById('selectedDate').value;
+                const weekStart = getWeekStart(new Date(selectedDate));
+                
+                for (let i = 0; i < 7; i++) {
+                    const day = new Date(weekStart);
+                    day.setDate(weekStart.getDate() + i);
+                    const dateStr = day.toISOString().split('T')[0];
+                    const entry = timeEntries[dateStr];
+                    
+                    if (entry && entry.startTime && entry.endTime) {
+                        const stats = calculateTimeStats(entry);
+                        data.push({
+                            'Datum': dateStr,
+                            'Wochentag': day.toLocaleDateString('de-DE', { weekday: 'long' }),
+                            'Arbeitsbeginn': entry.startTime || '',
+                            'Pausenbeginn': entry.breakStart || '',
+                            'Pausenende': entry.breakEnd || '',
+                            'Arbeitsende': entry.endTime || '',
+                            'Arbeitszeit': formatMinutes(stats.workMinutes),
+                            'Pausenzeit': formatMinutes(stats.breakMinutes),
+                            'Gesamtzeit': formatMinutes(stats.totalMinutes)
+                        });
+                    }
+                }
+            } else if (currentView === 'month') {
+                const selectedDate = document.getElementById('selectedDate').value;
+                const monthStart = new Date(selectedDate);
+                monthStart.setDate(1);
+                const monthEnd = new Date(monthStart);
+                monthEnd.setMonth(monthEnd.getMonth() + 1);
+                monthEnd.setDate(0);
+                
+                for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const entry = timeEntries[dateStr];
+                    
+                    if (entry && entry.startTime && entry.endTime) {
+                        const stats = calculateTimeStats(entry);
+                        data.push({
+                            'Datum': dateStr,
+                            'Wochentag': d.toLocaleDateString('de-DE', { weekday: 'long' }),
+                            'Arbeitsbeginn': entry.startTime || '',
+                            'Pausenbeginn': entry.breakStart || '',
+                            'Pausenende': entry.breakEnd || '',
+                            'Arbeitsende': entry.endTime || '',
+                            'Arbeitszeit': formatMinutes(stats.workMinutes),
+                            'Pausenzeit': formatMinutes(stats.breakMinutes),
+                            'Gesamtzeit': formatMinutes(stats.totalMinutes)
+                        });
+                    }
+                }
+            }
+            
+            if (data.length === 0) {
+                alert('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+            
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Zeiterfassung');
+            
+            const filename = `Zeiterfassung_${currentView}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, filename);
+        }
+    </script>
+</body>
+</html>
